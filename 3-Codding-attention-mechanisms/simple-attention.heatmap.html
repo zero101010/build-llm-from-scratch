@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Self-Attention Heatmap</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="light"] {
+    --color-bg:#f7f6f2;--color-surface:#f9f8f5;--color-surface-2:#fbfbf9;
+    --color-surface-offset:#f3f0ec;--color-border:#d4d1ca;
+    --color-text:#28251d;--color-text-muted:#7a7974;--color-text-faint:#bab9b4;
+    --color-primary:#01696f;--color-primary-hover:#0c4e54;
+    --shadow-sm:0 1px 2px oklch(0.2 0.01 80/0.06);--shadow-md:0 4px 12px oklch(0.2 0.01 80/0.08);
+    --radius-md:.5rem;--radius-lg:.75rem;--radius-xl:1rem;--radius-full:9999px;
+    --font-body:'Satoshi','Inter',sans-serif;
+    --text-xs:clamp(.75rem,.7rem + .25vw,.875rem);--text-sm:clamp(.875rem,.8rem + .35vw,1rem);
+    --text-base:clamp(1rem,.95rem + .25vw,1.125rem);--text-lg:clamp(1.125rem,1rem + .75vw,1.5rem);
+    --text-xl:clamp(1.5rem,1.2rem + 1.25vw,2.25rem);
+    --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;
+    --space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;
+    --transition-interactive:180ms cubic-bezier(.16,1,.3,1);
+  }
+  [data-theme="dark"] {
+    --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#201f1d;
+    --color-surface-offset:#1d1c1a;--color-border:#393836;
+    --color-text:#cdccca;--color-text-muted:#797876;--color-text-faint:#5a5957;
+    --color-primary:#4f98a3;--color-primary-hover:#227f8b;
+    --shadow-sm:0 1px 2px oklch(0 0 0/.2);--shadow-md:0 4px 12px oklch(0 0 0/.3);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
+  body{min-height:100dvh;font-family:var(--font-body,sans-serif);font-size:var(--text-base);
+    color:var(--color-text);background:var(--color-bg);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:var(--space-8) var(--space-4);
+    transition:background var(--transition-interactive),color var(--transition-interactive)}
+  header{width:100%;max-width:680px;display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-8)}
+  .logo{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);font-weight:600;
+    color:var(--color-text-muted);letter-spacing:.04em;text-transform:uppercase}
+  .theme-toggle{background:none;border:1px solid oklch(from var(--color-text) l c h/.15);
+    border-radius:var(--radius-md);padding:var(--space-2);color:var(--color-text-muted);
+    cursor:pointer;display:flex;align-items:center;
+    transition:color var(--transition-interactive),border-color var(--transition-interactive),background var(--transition-interactive)}
+  .theme-toggle:hover{color:var(--color-text);background:oklch(from var(--color-text) l c h/.06)}
+  .card{background:var(--color-surface);border:1px solid oklch(from var(--color-text) l c h/.08);
+    border-radius:var(--radius-xl);box-shadow:var(--shadow-md);padding:var(--space-8);
+    width:100%;max-width:680px}
+  .card-header{margin-bottom:var(--space-6)}
+  .card-title{font-size:var(--text-xl);font-weight:700;line-height:1.15;margin-bottom:var(--space-2)}
+  .card-subtitle{font-size:var(--text-sm);color:var(--color-text-muted)}
+  .controls{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-6);flex-wrap:wrap}
+  .control-label{font-size:var(--text-xs);color:var(--color-text-muted);font-weight:500;
+    text-transform:uppercase;letter-spacing:.06em}
+  .scheme-btn{padding:var(--space-1) var(--space-3);border-radius:var(--radius-md);
+    border:1px solid oklch(from var(--color-text) l c h/.15);background:none;
+    font-size:var(--text-xs);font-family:var(--font-body);color:var(--color-text-muted);
+    cursor:pointer;transition:all var(--transition-interactive)}
+  .scheme-btn.active,.scheme-btn:hover{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+  .highlight-toggle{display:flex;align-items:center;gap:var(--space-2);margin-left:auto;
+    font-size:var(--text-xs);color:var(--color-text-muted);cursor:pointer;user-select:none}
+  .highlight-toggle input{accent-color:var(--color-primary);width:14px;height:14px;cursor:pointer}
+  .heatmap-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.heatmap{border-collapse:separate;border-spacing:4px;width:100%}
+  table.heatmap th{font-size:var(--text-xs);font-weight:600;color:var(--color-text-muted);
+    text-align:center;padding:0 var(--space-2) var(--space-3);white-space:nowrap;letter-spacing:.02em}
+  table.heatmap th.row-header{text-align:right;padding-right:var(--space-4);padding-bottom:0;
+    padding-top:0;vertical-align:middle;min-width:72px}
+  table.heatmap td{width:72px;height:56px;text-align:center;vertical-align:middle;
+    border-radius:var(--radius-md);font-size:var(--text-sm);font-weight:600;
+    font-variant-numeric:tabular-nums lining-nums;cursor:pointer;
+    transition:transform var(--transition-interactive),box-shadow var(--transition-interactive);
+    position:relative}
+  table.heatmap td:hover{transform:scale(1.08);box-shadow:var(--shadow-md);z-index:10}
+  table.heatmap tr.highlighted td{outline:2.5px solid var(--color-primary);outline-offset:-2px}
+  .colorbar-row{display:flex;align-items:center;gap:var(--space-4);margin-top:var(--space-6);padding-left:80px}
+  .colorbar-label{font-size:var(--text-xs);color:var(--color-text-muted);white-space:nowrap}
+  .colorbar{flex:1;height:10px;border-radius:var(--radius-full)}
+  .legend{display:flex;align-items:center;gap:var(--space-4);margin-top:var(--space-4);
+    padding-left:80px;flex-wrap:wrap}
+  .legend-item{display:flex;align-items:center;gap:var(--space-2);
+    font-size:var(--text-xs);color:var(--color-text-muted)}
+  .legend-dot{width:10px;height:10px;border-radius:50%;background:var(--color-primary);opacity:.7}
+  .tooltip{position:fixed;background:var(--color-surface-2,var(--color-surface));
+    border:1px solid oklch(from var(--color-text) l c h/.15);border-radius:var(--radius-md);
+    padding:var(--space-2) var(--space-3);font-size:var(--text-xs);color:var(--color-text);
+    box-shadow:var(--shadow-md);pointer-events:none;opacity:0;
+    transition:opacity 120ms ease;z-index:100;max-width:200px}
+  .tooltip.visible{opacity:1}
+  .tooltip strong{color:var(--color-primary)}
+  @media(max-width:600px){
+    .card{padding:var(--space-4)}
+    table.heatmap td{width:44px;height:44px;font-size:10px}
+    table.heatmap th{font-size:10px}
+    table.heatmap th.row-header{min-width:52px}
+    .colorbar-row,.legend{padding-left:56px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-label="Attention Viz logo">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8" opacity=".35"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8" opacity=".35"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/>
+    </svg>
+    Attention Viz
+  </div>
+  <button class="theme-toggle" data-theme-toggle aria-label="Switch to light mode">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</header>
+
+<div class="card">
+  <div class="card-header">
+    <h1 class="card-title">Self-Attention Scores</h1>
+    <p class="card-subtitle">Query &times; Key weight matrix &mdash; "Your journey starts with one step"</p>
+  </div>
+  <div class="controls">
+    <span class="control-label">Colorscale</span>
+    <button class="scheme-btn active" data-scheme="warm">Warm</button>
+    <button class="scheme-btn" data-scheme="teal">Teal</button>
+    <button class="scheme-btn" data-scheme="purple">Purple</button>
+    <label class="highlight-toggle">
+      <input type="checkbox" id="highlight-toggle" checked>
+      Highlight row on click
+    </label>
+  </div>
+  <div class="heatmap-wrapper">
+    <table class="heatmap" id="heatmap" aria-label="Self-attention scores matrix"></table>
+  </div>
+  <div class="colorbar-row">
+    <span class="colorbar-label">Low</span>
+    <canvas class="colorbar" id="colorbar" height="10"></canvas>
+    <span class="colorbar-label">High</span>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot"></div><span>Click a row to highlight the query token</span></div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function(){
+  const root=document.documentElement,btn=document.querySelector('[data-theme-toggle]');
+  let theme='dark'; root.setAttribute('data-theme',theme);
+  btn.addEventListener('click',()=>{
+    theme=theme==='dark'?'light':'dark';
+    root.setAttribute('data-theme',theme);
+    btn.setAttribute('aria-label','Switch to '+(theme==='dark'?'light':'dark')+' mode');
+    btn.innerHTML=theme==='dark'
+      ?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+      :'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    updateColorbar();
+  });
+})();
+
+const words=["Your","journey","starts","with","one","step"];
+const data=[
+  [0.2098,0.2006,0.1981,0.1242,0.1220,0.1452],
+  [0.1385,0.2379,0.2333,0.1240,0.1082,0.1581],
+  [0.1390,0.2369,0.2326,0.1242,0.1108,0.1565],
+  [0.1435,0.2074,0.2046,0.1462,0.1263,0.1720],
+  [0.1526,0.1958,0.1975,0.1367,0.1879,0.1295],
+  [0.1385,0.2184,0.2128,0.1420,0.0988,0.1896],
+];
+const schemes={
+  warm:[[0.09,'#fff8ed'],[0.15,'#ffd89b'],[0.20,'#ffa726'],[0.25,'#f57c00'],[0.28,'#e65100']],
+  teal:[[0.09,'#e0f7f5'],[0.15,'#80cbc4'],[0.20,'#26a69a'],[0.25,'#00897b'],[0.28,'#004d40']],
+  purple:[[0.09,'#f5e6ff'],[0.15,'#d48ef5'],[0.20,'#ab47bc'],[0.25,'#8e24aa'],[0.28,'#5c0d7a']],
+};
+let scheme='warm',selectedRow=null,highlightEnabled=true;
+const allVals=data.flat();
+const minVal=Math.min(...allVals),maxVal=Math.max(...allVals);
+
+function lerp(a,b,t){return a+(b-a)*t}
+function hexToRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]}
+function getColor(val){
+  const stops=schemes[scheme];
+  const t=(val-minVal)/(maxVal-minVal);
+  const ts=t*(stops[stops.length-1][0]-stops[0][0])+stops[0][0];
+  for(let i=0;i<stops.length-1;i++){
+    if(ts<=stops[i+1][0]){
+      const lt=(ts-stops[i][0])/(stops[i+1][0]-stops[i][0]);
+      const c1=hexToRgb(stops[i][1]),c2=hexToRgb(stops[i+1][1]);
+      const r=Math.round(lerp(c1[0],c2[0],lt));
+      const g=Math.round(lerp(c1[1],c2[1],lt));
+      const b=Math.round(lerp(c1[2],c2[2],lt));
+      const lum=(0.299*r+0.587*g+0.114*b)/255;
+      return{bg:`rgb(${r},${g},${b})`,text:lum>0.55?'#1a1008':'#ffffff'};
+    }
+  }
+  const l=hexToRgb(stops[stops.length-1][1]);
+  return{bg:`rgb(${l[0]},${l[1]},${l[2]})`,text:'#ffffff'};
+}
+
+function buildTable(){
+  const tbl=document.getElementById('heatmap');
+  tbl.innerHTML='';
+  const thead=document.createElement('thead');
+  const hr=document.createElement('tr');
+  const ct=document.createElement('th');ct.className='row-header';hr.appendChild(ct);
+  words.forEach(w=>{const th=document.createElement('th');th.setAttribute('scope','col');th.textContent=w;hr.appendChild(th);});
+  thead.appendChild(hr);tbl.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  data.forEach((row,ri)=>{
+    const tr=document.createElement('tr');tr.dataset.row=ri;
+    if(selectedRow===ri&&highlightEnabled)tr.classList.add('highlighted');
+    const th=document.createElement('th');th.className='row-header';th.setAttribute('scope','row');th.textContent=words[ri];
+    tr.appendChild(th);
+    row.forEach((val,ci)=>{
+      const td=document.createElement('td');
+      const{bg,text}=getColor(val);
+      td.style.background=bg;td.style.color=text;td.textContent=val.toFixed(2);
+      td.setAttribute('aria-label',`${words[ri]} to ${words[ci]}: ${val.toFixed(4)}`);
+      td.addEventListener('mouseenter',e=>showTip(e,words[ri],words[ci],val));
+      td.addEventListener('mousemove',moveTip);
+      td.addEventListener('mouseleave',hideTip);
+      td.addEventListener('click',()=>{selectedRow=selectedRow===ri?null:ri;updateHL();});
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+}
+
+function updateHL(){
+  document.querySelectorAll('#heatmap tbody tr').forEach(tr=>{
+    tr.classList.toggle('highlighted',parseInt(tr.dataset.row)===selectedRow&&highlightEnabled);
+  });
+}
+function updateColors(){
+  document.querySelectorAll('#heatmap tbody tr').forEach((tr,ri)=>{
+    tr.querySelectorAll('td').forEach((td,ci)=>{
+      const{bg,text}=getColor(data[ri][ci]);td.style.background=bg;td.style.color=text;
+    });
+  });
+  updateColorbar();
+}
+
+const tip=document.getElementById('tooltip');
+function showTip(e,q,k,v){
+  tip.innerHTML=`<strong>${q}</strong> \u2192 <strong>${k}</strong><br>Score: ${v.toFixed(4)}`;
+  tip.classList.add('visible');moveTip(e);
+}
+function moveTip(e){tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-36)+'px';}
+function hideTip(){tip.classList.remove('visible');}
+
+function updateColorbar(){
+  const canvas=document.getElementById('colorbar');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.offsetWidth||300;canvas.width=W;
+  const stops=schemes[scheme];
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  stops.forEach(([s,c])=>{grad.addColorStop((s-stops[0][0])/(stops[stops.length-1][0]-stops[0][0]),c);});
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,10);
+}
+
+document.querySelectorAll('.scheme-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    scheme=b.dataset.scheme;
+    document.querySelectorAll('.scheme-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');updateColors();
+  });
+});
+document.getElementById('highlight-toggle').addEventListener('change',e=>{
+  highlightEnabled=e.target.checked;updateHL();
+});
+
+buildTable();
+window.addEventListener('resize',updateColorbar);
+setTimeout(updateColorbar,150);
+</script>
+</body>
+</html>
